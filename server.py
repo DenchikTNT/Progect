@@ -1,40 +1,38 @@
 import socket
 import threading
 
-# Настройки подключения
-HOST = '192.168.0.174'
+HOST = '192.168.0.174' 
 PORT = 6666
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((HOST, PORT))
 server.listen(2)
 
 clients = []
+lock = threading.Lock()
 
-def broadcast(message, current_conn):
-    """Отправка сообщения всем, кроме отправителя"""
-    for client in clients:
-        if client != current_conn:
-            try:
-                client.send(message)
-            except:
-                clients.remove(client)
+def broadcast(msg, sender):
+    with lock:
+        for c in clients:
+            if c != sender:
+                try: c.send(msg)
+                except: clients.remove(c)
 
-def handle_client(conn, addr):
-    print(f"[LOG] Игрок {addr} вошел в сеть")
+def handle(conn, addr):
+    print(f"[+] Игрок подключен: {addr}")
+    with lock: clients.append(conn)
     while True:
         try:
             data = conn.recv(1024)
             if not data: break
             broadcast(data, conn)
-        except:
-            break
-    print(f"[LOG] Игрок {addr} покинул игру")
-    clients.remove(conn)
+        except: break
+    with lock: 
+        if conn in clients: clients.remove(conn)
     conn.close()
 
-print("--- СЕРВЕР стрилялки ЗАПУЩЕН ---")
+print(f"--- SERVER STARTED ---")
 while True:
     conn, addr = server.accept()
-    clients.append(conn)
-    threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+    threading.Thread(target=handle, args=(conn, addr), daemon=True).start()
